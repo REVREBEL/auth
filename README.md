@@ -15,75 +15,140 @@
 
 # AUTH
 
-<div align="left">
-  <a href="https://github.com/REVREBEL/auth/issues">
-    <img src="https://img.shields.io/github/issues/REVREBEL/auth?color=163666&style=for-the-badge&logo=github" alt="Issues"/>
-  </a>
-  <a href="https://github.com/REVREBEL/auth/pulls">
-    <img src="https://img.shields.io/github/issues-pr/REVREBEL/auth?color=71c9c5&style=for-the-badge&logo=github" alt="PRs"/>
-  </a>
-</div>
+REVREBEL's browser authentication bridge for Webflow.
 
-<br>
-<br>
+The app is intentionally small: Webflow Cloud installs and bundles the Kinde JavaScript SDK, then ordinary Webflow pages load one stable browser asset and talk to `window.REVREBELAuth`.
 
-## **THE PROJECT**
+## Architecture
 
-* <!-- ... [WHY DID YOU CREATED THIS PROJECT?, MOTIVATION, PURPOSE, DESCRIPTION, OBJECTIVES, etc] -->
+```text
+Webflow Designer page
+        |
+        | <script src="/auth/assets/revrebel-auth.js">
+        v
+REVREBELAuth browser bridge
+        |
+        | @kinde-oss/kinde-auth-pkce-js
+        v
+Kinde (Authorization Code + PKCE)
+```
 
-<br>
-<br>
+The browser application never receives or stores a Kinde client secret. Configure the Kinde application as **Front-end and mobile**.
 
-## **INSTALLATION**
+## Webflow Cloud
 
-* <!-- ... [SHOW HOW YOUR PROJECT IS INSTALLED] -->
+Deploy this repository as a Vite application and mount it at:
 
+```text
+/auth
+```
 
+`webflow.json` declares the Vite framework. Webflow Cloud supplies the environment mount path during deployment.
 
-## **USAGE**
+The browser bundle is built to a stable path:
 
-* <!-- ... [SHOW HOW YOUR PROJECT IS USED] -->
+```text
+/auth/assets/revrebel-auth.js
+```
 
-<br>
-<br>
+## Webflow embed
 
-## **PROJECT TREE**
+Add the public Kinde values before loading the bundle:
 
-<!-- ... [SHOW YOUR PROJECT TREE HERE IF USEFUL] -->
+```html
+<script>
+  window.REVREBEL_AUTH_CONFIG = {
+    clientId: "YOUR_KINDE_CLIENT_ID",
+    domain: "https://auth.revrebel.io",
+    redirectUri: "https://www.revrebel.io/client-hub",
+    logoutUri: "https://www.revrebel.io/"
+  };
+</script>
 
-<br>
-<br>
+<script
+  type="module"
+  src="/auth/assets/revrebel-auth.js">
+</script>
+```
 
-## **NOTES**
+The client ID and Kinde domain are public browser configuration. Do not put a Kinde client secret in Webflow.
 
-* <!-- ... [ADD ADDITIONAL NOTES] -->
+## Browser API
 
-<br>
-<br>
+```js
+await REVREBELAuth.ready();
 
-## **SCREENSHOTS**
+await REVREBELAuth.login();
+await REVREBELAuth.register();
+await REVREBELAuth.logout();
 
-<!-- ... [SOME DESCRIPTIVE IMAGES] -->
+const authenticated = await REVREBELAuth.isAuthenticated();
+const user = await REVREBELAuth.getUser();
+const profile = await REVREBELAuth.getUserProfile();
+const token = await REVREBELAuth.getAccessToken();
 
+await REVREBELAuth.portal({
+  returnUrl: window.location.href
+});
 
+await REVREBELAuth.createOrganization({
+  app_state: {
+    redirectTo: window.location.href
+  }
+});
+```
 
-<br>
-<br>
+For calls to Webflow Cloud APIs, `REVREBELAuth.fetch()` automatically attaches the current access token as a Bearer token:
 
-<table>
-  <tbody>
-    <tr>
-      <td valign="middle" width="1200" height="200" >
-          <div>
-            <img src="https://raw.githubusercontent.com/REVREBEL/.github/main/assets/get-in-touch_dark.png" alt="Get in Touch" width="150" valign="top" />
-            &emsp;
-            <a href="https://github.com/REVREBEL" target="_blank"><img src="https://raw.githubusercontent.com/REVREBEL/.github/main/assets/icons/github-outline_dark.png" alt="GitHub" width="36" /></a>
-            <a href="mailto:hello@revrebel.io" target="_blank" target="_blank"><img src="https://raw.githubusercontent.com/REVREBEL/.github/main/assets/icons/email-outline_dark.png" alt="Email" width="36" /></a>
-            <a href="https://www.linkedin.com/company/revrebel/" target="_blank"><img src="https://raw.githubusercontent.com/REVREBEL/.github/main/assets/icons/linkedin-outline.png" alt="LinkedIn" width="36" /></a>
-            <a href="https://www.revrebel.io/blog" target="_blank"><img src="https://raw.githubusercontent.com/REVREBEL/.github/main/assets/icons/blog-outline.png" alt="Blog" width="36" /></a>
-            <a href="https://revrebel.io" target="_blank" style="display: inline-block;"><img src="https://img.shields.io/badge/website-163666?style=for-the-badge" alt="Website" height="40" align="right" /></a>
-          </div>
-      </td>
-    </tr>
-  </tbody>
-</table>
+```js
+const response = await REVREBELAuth.fetch("/dashboard/api/me");
+```
+
+## Events
+
+The bridge emits a `revrebel:auth` browser event for redirects, restored sessions, and auth errors.
+
+```js
+window.addEventListener("revrebel:auth", (event) => {
+  console.log(event.detail);
+});
+```
+
+## Local development
+
+```bash
+npm install
+npm run dev
+```
+
+Validate production output with:
+
+```bash
+npm run typecheck
+npm run build
+```
+
+## Kinde application
+
+Use a Kinde **Front-end and mobile** application with Authorization Code + PKCE.
+
+At minimum, add the Webflow URLs you use as:
+
+- Allowed callback URLs
+- Allowed logout redirect URLs
+- Allowed origins
+
+For production session restoration, use the Kinde custom domain on the REVREBEL domain, e.g. `auth.revrebel.io`.
+
+## Project tree
+
+```text
+.
+├── index.html
+├── package.json
+├── src/
+│   └── revrebel-auth.ts
+├── tsconfig.json
+├── vite.config.ts
+└── webflow.json
+```
