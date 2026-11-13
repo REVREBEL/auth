@@ -1,4 +1,8 @@
-import createKindeClient from "@kinde-oss/kinde-auth-pkce-js";
+import createKindeClient, {
+  type KindeClient,
+  type LogoutOptions,
+  type RedirectOptions,
+} from "@kinde-oss/kinde-auth-pkce-js";
 
 export type REVREBELAuthConfig = {
   clientId: string;
@@ -9,24 +13,25 @@ export type REVREBELAuthConfig = {
   scope?: string;
 };
 
-type KindeClient = Awaited<ReturnType<typeof createKindeClient>>;
+type PortalOptions = Parameters<KindeClient["portal"]>[0];
 
 type AuthEventDetail =
-  | { type: "redirect"; user: unknown; appState: unknown }
-  | { type: "session-restored"; user: unknown }
+  | { type: "redirect"; user: unknown; appState?: Record<string, unknown> }
+  | { type: "session-restored"; user: unknown; appState?: Record<string, unknown> }
   | { type: "error"; error: unknown };
 
 type REVREBELAuthApi = {
   configure(config: REVREBELAuthConfig): REVREBELAuthApi;
   ready(): Promise<KindeClient>;
-  login(options?: Record<string, unknown>): Promise<unknown>;
-  register(options?: Record<string, unknown>): Promise<unknown>;
-  logout(options?: Record<string, unknown>): Promise<unknown>;
+  login(options?: RedirectOptions): Promise<void>;
+  register(options?: RedirectOptions): Promise<void>;
+  logout(options?: string | LogoutOptions): Promise<void>;
   isAuthenticated(): Promise<boolean>;
-  getUser(): Promise<unknown>;
+  getUser(): Promise<ReturnType<KindeClient["getUser"]>>;
+  getUserProfile(): ReturnType<KindeClient["getUserProfile"]>;
   getAccessToken(): Promise<string | undefined>;
-  portal(options?: Record<string, unknown>): Promise<unknown>;
-  createOrganization(options?: Record<string, unknown>): Promise<unknown>;
+  portal(options: PortalOptions): Promise<void>;
+  createOrganization(options?: RedirectOptions): Promise<void>;
   fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
 };
 
@@ -37,8 +42,10 @@ declare global {
   }
 }
 
-let activeConfig: Required<Pick<REVREBELAuthConfig, "clientId" | "domain" | "redirectUri">> &
-  Omit<REVREBELAuthConfig, "clientId" | "domain" | "redirectUri"> | null = null;
+let activeConfig:
+  | (Required<Pick<REVREBELAuthConfig, "clientId" | "domain" | "redirectUri">> &
+      Omit<REVREBELAuthConfig, "clientId" | "domain" | "redirectUri">)
+  | null = null;
 
 let clientPromise: Promise<KindeClient> | null = null;
 
@@ -46,7 +53,8 @@ function normalizeConfig(config: REVREBELAuthConfig) {
   const clientId = config.clientId?.trim();
   const domain = config.domain?.trim().replace(/\/+$/, "");
   const redirectUri =
-    config.redirectUri?.trim() || `${window.location.origin}${window.location.pathname}`;
+    config.redirectUri?.trim() ||
+    `${window.location.origin}${window.location.pathname}`;
 
   if (!clientId) {
     throw new Error("REVREBELAuth requires a Kinde clientId.");
@@ -109,8 +117,11 @@ async function getClient() {
     on_redirect_callback: (user, appState) => {
       dispatch({ type: "redirect", user, appState });
     },
-    on_session_restore_callback: (user) => {
-      dispatch({ type: "session-restored", user });
+    on_session_restore_callback: (user, appState) => {
+      dispatch({ type: "session-restored", user, appState });
+    },
+    on_error_callback: (error) => {
+      dispatch({ type: "error", error });
     },
   });
 
@@ -131,23 +142,27 @@ const api: REVREBELAuthApi = {
   },
 
   async login(options) {
-    return (await getClient()).login(options);
+    await (await getClient()).login(options);
   },
 
   async register(options) {
-    return (await getClient()).register(options);
+    await (await getClient()).register(options);
   },
 
   async logout(options) {
-    return (await getClient()).logout(options);
+    await (await getClient()).logout(options);
   },
 
   async isAuthenticated() {
-    return Boolean(await (await getClient()).isAuthenticated());
+    return (await getClient()).isAuthenticated();
   },
 
   async getUser() {
     return (await getClient()).getUser();
+  },
+
+  async getUserProfile() {
+    return (await getClient()).getUserProfile();
   },
 
   async getAccessToken() {
@@ -155,11 +170,11 @@ const api: REVREBELAuthApi = {
   },
 
   async portal(options) {
-    return (await getClient()).portal(options);
+    await (await getClient()).portal(options);
   },
 
   async createOrganization(options) {
-    return (await getClient()).createOrg(options);
+    await (await getClient()).createOrg(options);
   },
 
   async fetch(input, init = {}) {
